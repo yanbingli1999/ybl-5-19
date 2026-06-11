@@ -87,6 +87,14 @@ export const HeatCanvas: React.FC = () => {
         addHeatSource({ x, y, temperature: brushTemperature, radius: brushSize });
       } else if (drawMode === 'erase') {
         engine.eraseHeat(x, y, brushSize);
+        const store = useSimulationStore.getState();
+        const filtered = store.initialHeatSources.filter(source => {
+          const dx = source.x - x;
+          const dy = source.y - y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          return dist > source.radius + brushSize;
+        });
+        store.setInitialHeatSources(filtered);
       }
 
       const newTemp = engine.getTemperatureData();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Grid, Thermometer, Flame, Settings, Gauge, Square } from 'lucide-react';
+import { Grid, Thermometer, Flame, Settings, Gauge, Square, X, List } from 'lucide-react';
 import useSimulationStore from '../store/useSimulationStore';
 
 export const ConfigPanel: React.FC = () => {
@@ -16,6 +16,7 @@ export const ConfigPanel: React.FC = () => {
     brushSize,
     brushTemperature,
     drawMode,
+    initialHeatSources,
     setGrid,
     setBoundaryConditions,
     setMaterialId,
@@ -26,6 +27,7 @@ export const ConfigPanel: React.FC = () => {
     setBrushTemperature,
     setDrawMode,
     setDiffusionCoefficient,
+    removeHeatSource,
   } = useSimulationStore();
 
   const handleGridSizeChange = (dimension: 'width' | 'height', value: number) => {
@@ -289,6 +291,58 @@ export const ConfigPanel: React.FC = () => {
                 className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
               />
             </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+            <List className="w-4 h-4 text-amber-400" />
+            热源列表
+            <span className="text-xs font-normal text-slate-500">({initialHeatSources.length})</span>
+          </h3>
+          <div className="max-h-48 overflow-y-auto space-y-1.5">
+            {initialHeatSources.length === 0 ? (
+              <div className="text-xs text-slate-500 text-center py-3">
+                暂无热源，点击画布添加
+              </div>
+            ) : (
+              initialHeatSources.map((source, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between bg-slate-800/80 rounded-lg px-3 py-2 group hover:bg-slate-700/80 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{
+                        backgroundColor: source.temperature >= 25
+                          ? `rgb(${Math.min(255, Math.floor((source.temperature - 25) * 2.5))}, ${Math.max(0, 100 - Math.floor((source.temperature - 25) * 1.5))}, 0)`
+                          : `rgb(0, ${Math.min(255, Math.floor((25 - source.temperature) * 5))}, ${Math.min(255, Math.floor((25 - source.temperature) * 10))})`,
+                      }}
+                    />
+                    <span className="text-xs text-slate-300 truncate">
+                      ({source.x}, {source.y})
+                    </span>
+                    <span className="text-xs font-mono text-slate-400">
+                      {source.temperature}°C
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      r{source.radius}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      useSimulationStore.getState().pushHistory();
+                      removeHeatSource(index);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/30 text-slate-400 hover:text-red-400 transition-all"
+                    title="删除此热源"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
