@@ -7,6 +7,7 @@ export const HeatCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDrawingRef = useRef(false);
+  const hasDrawnRef = useRef(false);
 
   const {
     grid,
@@ -17,14 +18,44 @@ export const HeatCanvas: React.FC = () => {
     setCurrentTemperature,
     addHeatSource,
     mode,
+    pushHistory,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useSimulationStore();
 
-  const { getEngine, initEngine, isRunning } = useSimulation();
+  const { getEngine, initEngine, isRunning, syncEngineFromStore } = useSimulation();
   const { render } = useHeatRenderer(canvasRef, {
     showGrid: true,
     showCellValues: true,
     showColorBar: true,
   });
+
+  useEffect(() => {
+    syncEngineFromStore();
+  }, [syncEngineFromStore]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (mode === 'running') return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          if (canUndo()) {
+            undo();
+          }
+        } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+          e.preventDefault();
+          if (canRedo()) {
+            redo();
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, canUndo, canRedo, undo, redo]);
 
   const getGridCoordinates = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -67,13 +98,17 @@ export const HeatCanvas: React.FC = () => {
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (mode === 'running') return;
+      if (drawMode === 'none') return;
       isDrawingRef.current = true;
+      hasDrawnRef.current = false;
       const coords = getGridCoordinates(e);
       if (coords) {
+        pushHistory();
         drawAtPosition(coords.x, coords.y);
+        hasDrawnRef.current = true;
       }
     },
-    [mode, getGridCoordinates, drawAtPosition]
+    [mode, drawMode, getGridCoordinates, pushHistory, drawAtPosition]
   );
 
   const handleMouseMove = useCallback(
@@ -83,6 +118,7 @@ export const HeatCanvas: React.FC = () => {
 
       if (isDrawingRef.current && coords && !isRunning) {
         drawAtPosition(coords.x, coords.y);
+        hasDrawnRef.current = true;
       }
     },
     [getGridCoordinates, setHoveredCell, isRunning, drawAtPosition]
@@ -90,10 +126,12 @@ export const HeatCanvas: React.FC = () => {
 
   const handleMouseUp = useCallback(() => {
     isDrawingRef.current = false;
+    hasDrawnRef.current = false;
   }, []);
 
   const handleMouseLeave = useCallback(() => {
     isDrawingRef.current = false;
+    hasDrawnRef.current = false;
     setHoveredCell(null);
   }, [setHoveredCell]);
 

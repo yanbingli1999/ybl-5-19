@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Pause, RotateCcw, SkipForward, Save, Camera } from 'lucide-react';
+import { Play, Pause, RotateCcw, SkipForward, Save, Camera, Undo2, Redo2 } from 'lucide-react';
 import useSimulationStore from '../store/useSimulationStore';
 import useSimulation from '../hooks/useSimulation';
 import api from '../services/api';
@@ -12,9 +12,31 @@ export const ControlBar: React.FC = () => {
     currentTemperature,
     currentExperimentId,
     addSnapshot,
+    undo,
+    redo,
+    undoStack,
+    redoStack,
+    maxHistorySize,
   } = useSimulationStore();
 
   const { play, pause, reset, stepForward, isRunning, isPaused, isFinished, isIdle } = useSimulation();
+
+  const undoCount = undoStack.length;
+  const redoCount = redoStack.length;
+  const canUndoState = undoCount > 0 && !isRunning;
+  const canRedoState = redoCount > 0 && !isRunning;
+
+  const handleUndo = () => {
+    if (!isRunning && undoCount > 0) {
+      undo();
+    }
+  };
+
+  const handleRedo = () => {
+    if (!isRunning && redoCount > 0) {
+      redo();
+    }
+  };
 
   const generateId = () => `snap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -73,6 +95,38 @@ export const ControlBar: React.FC = () => {
   return (
     <div className="h-20 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 px-6 flex items-center justify-between gap-6">
       <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 bg-slate-800 rounded-xl p-1">
+          <button
+            onClick={handleUndo}
+            disabled={!canUndoState}
+            className="w-12 h-12 flex items-center justify-center bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all hover:scale-105 relative"
+            title={`撤销 (Ctrl+Z) - 历史: ${undoCount}/${maxHistorySize}`}
+          >
+            <Undo2 className="w-5 h-5" />
+            {undoCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {undoCount}
+              </span>
+            )}
+          </button>
+          
+          <button
+            onClick={handleRedo}
+            disabled={!canRedoState}
+            className="w-12 h-12 flex items-center justify-center bg-slate-700 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all hover:scale-105 relative"
+            title={`重做 (Ctrl+Y / Ctrl+Shift+Z) - 可重做: ${redoCount}`}
+          >
+            <Redo2 className="w-5 h-5" />
+            {redoCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-cyan-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {redoCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        <div className="w-px h-10 bg-slate-700" />
+
         <div className="flex items-center gap-2 bg-slate-800 rounded-xl p-1">
           {isIdle || isPaused || isFinished ? (
             <button

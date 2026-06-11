@@ -10,6 +10,11 @@ import type {
   SimulationMode,
 } from '@shared/types';
 
+interface HistoryState {
+  temperature: number[][];
+  heatSources: HeatSource[];
+}
+
 interface SimulationState {
   mode: SimulationMode;
   currentStep: number;
@@ -37,6 +42,10 @@ interface SimulationState {
   
   currentExperimentId: string | null;
   hoveredCell: { x: number; y: number } | null;
+  
+  undoStack: HistoryState[];
+  redoStack: HistoryState[];
+  maxHistorySize: number;
   
   setMode: (mode: SimulationMode) => void;
   setCurrentStep: (step: number) => void;
@@ -69,6 +78,13 @@ interface SimulationState {
   setCurrentExperimentId: (id: string | null) => void;
   setHoveredCell: (cell: { x: number; y: number } | null) => void;
   
+  pushHistory: () => void;
+  undo: () => boolean;
+  redo: () => boolean;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
+  clearUndoRedo: () => void;
+  
   reset: () => void;
 }
 
@@ -92,6 +108,10 @@ function createEmptyTemperature(grid: GridConfig): number[][] {
     data[y] = new Array(grid.width).fill(25);
   }
   return data;
+}
+
+function deepCloneTemperature(data: number[][]): number[][] {
+  return data.map(row => [...row]);
 }
 
 export const useSimulationStore = create<SimulationState>((set, get) => ({
@@ -122,6 +142,10 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   currentExperimentId: null,
   hoveredCell: null,
   
+  undoStack: [],
+  redoStack: [],
+  maxHistorySize: 50,
+  
   setMode: (mode) => set({ mode }),
   setCurrentStep: (step) => set({ currentStep: step }),
   setCurrentTemperature: (temp) => set({ currentTemperature: temp }),
@@ -137,6 +161,8 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       currentTemperature: createEmptyTemperature(grid),
       temperatureHistory: [],
       currentStep: 0,
+      undoStack: [],
+      redoStack: [],
     }),
   setBoundaryConditions: (bc) => set({ boundaryConditions: bc }),
   setMaterialId: (id) => {
@@ -182,12 +208,86 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   setCurrentExperimentId: (id) => set({ currentExperimentId: id }),
   setHoveredCell: (cell) => set({ hoveredCell: cell }),
   
+  pushHistory: () => {
+    const state = get();
+    if (state.mode === 'running') return;
+    
+    const currentState: HistoryState = {
+      temperature: deepCloneTemperature(state.currentTemperature),
+      heatSources: state.initialHeatSources.map(s => ({ ...s })),
+    };
+    
+    set((prev) => {
+      let newUndoStack = [...prev.undoStack, currentState];
+      if (newUndoStack.length > prev.maxHistorySize) {
+        newUndoStack = newUndoStack.slice(newUndoStack.length - prev.maxHistorySize);
+      }
+      return {
+        undoStack: newUndoStack,
+        redoStack: [],
+      };
+    });
+  },
+  
+  undo: () => {
+    const state = get();
+    if (state.mode === 'running') return false;
+    if (state.undoStack.length === 0) return false;
+    
+    const previousState = state.undoStack[state.undoStack.length - 1];
+    const currentState: HistoryState = {
+      temperature: deepCloneTemperature(state.currentTemperature),
+      heatSources: state.initialHeatSources.map(s => ({ ...s })),
+    };
+    
+    set((prev) => ({
+      undoStack: prev.undoStack.slice(0, -1),
+      redoStack: [...prev.redoStack, currentState],
+      currentTemperature: deepCloneTemperature(previousState.temperature),
+      initialHeatSources: previousState.heatSources.map(s => ({ ...s })),
+      temperatureHistory: [],
+      currentStep: 0,
+    }));
+    
+    return true;
+  },
+  
+  redo: () => {
+    const state = get();
+    if (state.mode === 'running') return false;
+    if (state.redoStack.length === 0) return false;
+    
+    const nextState = state.redoStack[state.redoStack.length - 1];
+    const currentState: HistoryState = {
+      temperature: deepCloneTemperature(state.currentTemperature),
+      heatSources: state.initialHeatSources.map(s => ({ ...s })),
+    };
+    
+    set((prev) => ({
+      redoStack: prev.redoStack.slice(0, -1),
+      undoStack: [...prev.undoStack, currentState],
+      currentTemperature: deepCloneTemperature(nextState.temperature),
+      initialHeatSources: nextState.heatSources.map(s => ({ ...s })),
+      temperatureHistory: [],
+      currentStep: 0,
+    }));
+    
+    return true;
+  },
+  
+  canUndo: () => get().undoStack.length > 0,
+  canRedo: () => get().redoStack.length > 0,
+  
+  clearUndoRedo: () => set({ undoStack: [], redoStack: [] }),
+  
   reset: () =>
     set((state) => ({
       mode: 'idle',
       currentStep: 0,
       currentTemperature: createEmptyTemperature(state.grid),
       temperatureHistory: [],
+      undoStack: [],
+      redoStack: [],
     })),
 }));
 

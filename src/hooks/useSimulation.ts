@@ -15,12 +15,17 @@ export function useSimulation() {
     currentStep,
     currentTemperature,
     temperatureHistory,
+    undoStack,
+    redoStack,
     setMode,
     setCurrentStep,
     setCurrentTemperature,
     addTemperatureToHistory,
     clearHistory,
   } = useSimulationStore();
+
+  const undoLenRef = useRef(0);
+  const redoLenRef = useRef(0);
 
   const engineRef = useRef<HeatDiffusionEngine | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -188,6 +193,33 @@ export function useSimulation() {
     }
   }, [diffusionCoefficient]);
 
+  const syncEngineFromStore = useCallback(() => {
+    if (!engineRef.current || isRunningRef.current) return;
+    
+    engineRef.current.setTemperatureData(currentTemperature);
+    Object.defineProperty(engineRef.current, 'currentStep', {
+      value: currentStep,
+      writable: true,
+    });
+    
+    if (temperatureHistory.length === 0) {
+      addTemperatureToHistory(currentTemperature.map(row => [...row]));
+    }
+  }, [currentTemperature, currentStep, temperatureHistory.length, addTemperatureToHistory]);
+
+  useEffect(() => {
+    const prevUndoLen = undoLenRef.current;
+    const prevRedoLen = redoLenRef.current;
+    const currUndoLen = undoStack.length;
+    const currRedoLen = redoStack.length;
+    undoLenRef.current = currUndoLen;
+    redoLenRef.current = currRedoLen;
+
+    if (!isRunningRef.current && (prevUndoLen !== currUndoLen || prevRedoLen !== currRedoLen)) {
+      syncEngineFromStore();
+    }
+  }, [undoStack, redoStack, syncEngineFromStore]);
+
   useEffect(() => {
     return () => {
       if (animationFrameRef.current) {
@@ -206,6 +238,7 @@ export function useSimulation() {
     goToStep,
     initEngine,
     getEngine,
+    syncEngineFromStore,
     isRunning: mode === 'running',
     isPaused: mode === 'paused',
     isFinished: mode === 'finished',
